@@ -11,6 +11,7 @@ using namespace std;
 #define MAX_NUM_ORDERS_IN_HEAP (1 << 16)
 #define NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK (1 << 16)
 
+/* Represents the status of an error to be returned. */
 typedef enum error_status {
 	ACCEPT,
 	INVALID_AMMENDMENT_DETAILS = 101,
@@ -18,6 +19,7 @@ typedef enum error_status {
 	ORDER_DOES_NOT_EXIST = 404,
 };
 
+/* Represents an action within a command. */
 typedef enum action {
 	NEW,
 	AMEND,
@@ -26,32 +28,39 @@ typedef enum action {
 	QUERY
 } action_t;
 
+/* Represents an order id. */
 typedef uint64_t order_id_t;
 
+/* Represents a symbol. */
 typedef string symbol_t;
 
+/* Represents an order type. */
 typedef enum order_type {
 	MARKET,
 	LIMIT,
 	IOC
 } order_type_t;
 
-
+/* Represents the strings for each order type. */
 static const char* order_type_to_str[]{
 	"M",
 	"L",
 	"I"
 };
 
+/* Represents the two sides of a equities trade. */
 typedef enum side {
 	BUY,
 	SELL
 } side_t;
 
+/* Represents the price of an order. */
 typedef float price_t;
 
+/* Represents the quantity of an order. */
 typedef uint64_t quantity_t;
 
+/* Represents the executio status of an order. */
 typedef enum execution_status_t {
 	NOT_EXECUTED,
 	PARTIALLY_EXECUTED,
@@ -59,9 +68,10 @@ typedef enum execution_status_t {
 	CANCELLED
 } execution_status_t;
 
+/* Represents alterations in the history of an order. */
 typedef struct alteration_history_t {
 	execution_status_t history;
-	time_t date;	
+	time_t timestamp;	
 	price_t price;
 	quantity_t quantity_remaining;
 	alteration_history_t* next_update;
@@ -104,13 +114,17 @@ public:
 			(quantity_t) 0) {
 	};
 
-	bool active_at(const time_t& t = -1) const {
+	/**
+	* Checks if this order was active (valid) at a given
+	* time_t t. 
+	*/
+	bool active_at(const time_t& t) const {
 		
 		bool is_active = false;
 		
 		alteration_history_t* ht = get_history_entry(t);
 		execution_status_t status = ht->history;
-		if ((t == -1 || history->date <= t)
+		if ((t == -1 || history->timestamp <= t)
 			&& status != EXECUTED  
 			&& status != CANCELLED) {
 			is_active = true;
@@ -118,13 +132,16 @@ public:
 		
 		return is_active;
 	}
-
+	
+	/** 
+	* Gets the relevant alteration history entry for an order.
+	*/
 	alteration_history_t *get_history_entry(const time_t& t = -1) const {
 		alteration_history_t* most_recent = history; 
 		for (alteration_history_t* eht = history;
 			eht != NULL;
 			eht = eht->next_update) {
-			if (t == -1 || eht->date <= t) {
+			if (t == -1 || eht->timestamp <= t) {
 				most_recent = eht; 
 			} else {
 				break;
@@ -133,85 +150,110 @@ public:
 		return most_recent;
 	}
 
+	/** 
+	* Gets the status of an order at a given time t.
+	*/
 	execution_status_t get_status(const time_t& t = -1) const{
 		return get_history_entry(t)->history;
 	}
 
+	/**
+	* Gets the price of an order at a given time t.
+	*/
 	price_t get_price(const time_t& t = -1) const {
 		return get_history_entry(t)->price;
 	}
 
+	/**
+	* Gets the quantity of an order at a given time t.
+	*/
 	quantity_t get_quantity(const time_t& t = -1) const {
 		return get_history_entry(t)->quantity_remaining;
 	}
 
+	/**
+	* Gets the timestamp of an order at a given time t. 
+	*/
 	time_t get_timestamp(const time_t& t = -1) const{
-		return get_history_entry(t)->date;
+		return get_history_entry(t)->timestamp;
 	}
 
+	/**
+	* Gets the order id of an order. 
+	*/
 	order_id_t get_order_id() const {
 		return order_id;
 	}
 
+	/** 
+	* Gets the order type of an order. 
+	*/
 	order_type_t get_order_type() const {
 		return order_type;
 	}
 
+	/** 
+	* Adds a given entry to the alteration history
+	* of the order at time t with price p and quantity q. 
+	*/
 	int add_execution_history_entry(
 		const execution_status_t& history,
-		const time_t& date,
+		const time_t& t,
 		const price_t& price,
-		const quantity_t& quantity_remaining) {
+		const quantity_t& q) {
 
 		alteration_history_t* new_entry = new alteration_history_t {
 			history,
-			date,
+			t,
 			price,
-			quantity_remaining,
+			q,
 			NULL
 		};
 
 		alteration_history_t* history_entry = get_history_entry();
-		if (history_entry->date > date) {
+		if (history_entry->timestamp > t) {
 			delete new_entry;
 		} else {
 			history_entry->next_update = new_entry;
 		}
 		return ACCEPT;
 	}
+	
+	/**
+	* Performs a transaction on the order at time t,
+	* bringing the price to p and the quantity to q.
+	*/
+	void transact(
+		const time_t& t, 
+		const price_t& p, 
+		const quantity_t& q) {
 
-	Order transact(
-		const time_t& date, 
-		const price_t& new_price, 
-		const quantity_t& new_quantity) {
-
-		execution_status_t status = (new_quantity == 0)
+		execution_status_t status = (q == 0)
 			? EXECUTED : PARTIALLY_EXECUTED;
 		
-		add_execution_history_entry(
-			status,
-			date, 
-			new_price, 
-			new_quantity);
-		
-		return *this;
+		add_execution_history_entry(status, t, p,  q);
 	}
 
+	/** 
+	* Performs an ammentment to a given order setting price
+	* to p and quantity to q.
+	*/
 	int ammend(
-		const price_t& new_price, 
-		const quantity_t& new_quantity) {
+		const price_t& p, 
+		const quantity_t& q) {
 
 		alteration_history_t* history_entry = get_history_entry();
 		
 		add_execution_history_entry(
 			history_entry->history,
-			history_entry->date,
-			new_price,
-			new_quantity);
+			history_entry->timestamp,
+			p,
+			q);
 		return ACCEPT;
 	}
 };
 
+/* Represents the type of an order heap. */
 typedef enum order_heap_type_t {
 	BUY_HEAP,
 	SELL_HEAP
@@ -233,13 +275,16 @@ private:
 	*/
 	Order data[MAX_NUM_ORDERS_IN_HEAP];
 
+	/* Represents the end of active orders. */
 	Order* active_ptr;
+	/* Represents the end of matched orders. */
 	Order* matched_ptr;
-
+	/* Represents the used allocations in the array. */
 	bool allocated[MAX_NUM_ORDERS_IN_HEAP];
-
+	/* Represents the type of the heap. */
 	order_heap_type_t heap_type;
 
+	/* Swaps two indices in the array for eachother. */
 	void swap(
 		const int& a, 
 		const int& b) {
@@ -249,6 +294,7 @@ private:
 		data[b] = temp;
 	}
 
+	/* Makes an order in the array inactive. */
 	void make_inactive(const int& i) {
 		swap(i, active_ptr - data - 1);
 		allocated[active_ptr - data - 1] = false;
@@ -256,6 +302,10 @@ private:
 		push_down(0);
 	}
 
+	/** 
+	* Checks the precedence (sorted order) of two orders.
+	* i.e. a < b.
+	*/
 	bool has_precedence(
 		const Order& a,
 		const Order& b,
@@ -275,6 +325,11 @@ private:
 		return result;
 	}
 
+	/** 
+	* Checks the precedence (sorted order) of two indices
+	* Corresponding the orders in the array.
+	* i.e. a < b.
+	*/
 	bool has_precedence(
 		const int& a,
 		const int& b,
@@ -282,10 +337,18 @@ private:
 		return has_precedence(*(data + a), *(data + b), t);
 	}
 
+	/**
+	* Checks if the given indice of the array corresponds
+	* to an order which has children. 
+	*/
 	bool has_children(const int& a) const {
 		return (allocated[a << 1] || allocated[a << 1 + 1]);
 	}
-
+	
+	/** 
+	* Returns the indice of the smallest descendant
+	* of the order associated with the given indice a. 
+	*/
 	int smallest_descendant(const int& a) const {
 		int min = -1;
 		if (allocated[a << 1]) {
@@ -299,10 +362,18 @@ private:
 		return min;
 	}
 
+	/** 
+	* Returns the indice of the parent of the node 
+	* that corresponds to the order at given indice m.
+	*/
 	int get_parent(const int& m) const {
 		return m << 1;
 	}
 
+	/**
+	* Checks if the node at index a is the grandchild
+	* of the node at index b.
+	*/
 	bool is_grandchild_of(
 		const int& a, 
 		const int& b) const {
@@ -447,6 +518,9 @@ private:
 		}
 	}
 
+	/** 
+	* Searches the heap for an order with a given id. 
+	*/
 	int search(const order_id_t& id) {
 		int found_id = -1;
 		for (Order* d = data;
@@ -462,6 +536,7 @@ private:
 	}
 
 public:
+	
 	OrderMinMaxHeap(
 		const order_heap_type_t& type) {
 
@@ -480,6 +555,9 @@ public:
 		heap_type = type;
 	}
 
+	/**
+	* Inserts an order in the heap.
+	*/
 	bool insert(const Order& datum) {
 		swap(active_ptr - data, matched_ptr - data);
 		/* Append */
@@ -492,6 +570,10 @@ public:
 		return true;
 	}
 
+	/**
+	* Ammends an order in the heap with given id,
+	* with a new given price and quantity. 
+	*/
 	bool ammend(
 		const order_id_t& id,
 		const price_t& new_price,
@@ -516,6 +598,9 @@ public:
 		return return_status;
 	}
 
+	/**
+	* Cancels an order in the heap with given id.
+	*/
 	int cancel(const order_id_t& id) {
 
 		int return_status = ACCEPT;
@@ -537,6 +622,11 @@ public:
 		return return_status;
 	}
 
+	/** 
+	* Returns the maximum order in the heap.
+	* Since we sort by priority, this is the highest
+	* priority order. 
+	*/
 	Order* get_max_order() {
 		Order* max;
 		if (!allocated[0]) {
@@ -555,10 +645,12 @@ public:
 		return max;
 	}
 
-	Order* get_min_order() {
-		return data;
-	}
-
+	/** 
+	* Gets the maximum n orders in the heap at time t, 
+	* and places them in the output array.
+	* Since we sort by priority, these are the n highest
+	* priority orders.
+	*/
 	int get_max_n_orders(
 		const time_t& t, 
 		Order* output, 
@@ -610,15 +702,19 @@ public:
 		return stack_i;
 	}
 
+	/** 
+	* Performs a transaction at time t against a given 
+	* order with id in this array, reducing the quantity 
+	* remaining by the given amount */
 	bool transact(
 		const order_id_t& local_id, 
-		const price_t& deduction, 
+		const quantity_t& amount, 
 		const time_t& t) {
 		
 		int local_i = search(local_id);
 		Order* local = data + local_i;
 
-		int abs_diff = local->get_quantity(t) - deduction;
+		int abs_diff = local->get_quantity(t) - amount;
 
 		if (abs_diff <= 0) {
 			local->transact(t, local->get_price(t), 0);
@@ -627,7 +723,7 @@ public:
 			local->transact(
 				t,
 				local->get_price(t),
-				local->get_quantity(t) - deduction);
+				local->get_quantity(t) - amount);
 		}
 		return true;
 	}
@@ -638,9 +734,13 @@ public:
    next symbol in the hash table entry. */
 class OrderEntry {
 private:
+	/* Stores the symbol (ticker) associated with this entry. */
 	char* symbol;
+	/* Stores the buys for the symbol (ticker). */
 	OrderMinMaxHeap* buys;
+	/* Stores the sells for the symbol (ticker). */
 	OrderMinMaxHeap* sells;	
+	/* Stores the next entry in this bucket. */
 	OrderEntry* next_entry;
 public:	
 	OrderEntry(char* s)
@@ -651,14 +751,24 @@ public:
 		symbol = s;
 	};
 
+	/**
+	* Gets the symbol associated with this entry. 
+	*/
 	char* get_symbol() const {
 		return symbol;
 	}
 
+	/**
+	* Gets the next entry associated with this entry.
+	*/
 	OrderEntry* get_next_entry() const {
 		return next_entry;
 	}
 
+	/**
+	* Adds an order to the symbol (ticker) associated
+	* with this entry for a buying or selling side s.
+	*/
 	bool add(
 		const Order& o, 
 		const side_t& s) {
@@ -675,6 +785,11 @@ public:
 		return true;
 	}
 
+	/**
+	* Ammends an order associated with this entry's 
+	* symbol (ticker) with a given order id, to give it
+	* a new price p and quantity q.
+	*/
 	bool ammend(
 		const side& s, 
 		const order_id_t& oid, 
@@ -689,6 +804,10 @@ public:
 		return true;
 	}
 
+	/**
+	* Cancels an order associated with this entry's
+	* symbol (ticker) with a given order id for a given side. 
+	*/
 	int cancel(
 		const order_id_t& oid, 
 		const side& s) {
@@ -701,12 +820,16 @@ public:
 		return ACCEPT;
 	}
 
+	/**
+	* Matches the orders associated with this entry's
+	* symbol (ticker) at a given time t.
+	*/
 	int match(const time_t &t) {
 
 		while (true) {
 
 			Order* best_buy = buys->get_max_order();
-			Order* best_sell = sells->get_min_order();
+			Order* best_sell = sells->get_max_order();
 
 			if (!best_buy || !best_sell) break;
 			/* Collect buy data.  */
@@ -748,6 +871,10 @@ public:
 		return ACCEPT;
 	}
 
+	/** 
+	* Queries the symbol (ticker) associated with this entry
+	* at a given time t.
+	*/
 	int query(const time_t& t = -1) {
 		
    		Order top_buys[5];
@@ -795,6 +922,10 @@ public:
 	}
 };
 
+/** 
+* Represents the format of a command. 
+* This corresponds to the alternative of the command.
+*/
 typedef enum command_format_t {
 	F_NEW,
 	F_AMMEND,
@@ -838,6 +969,10 @@ public:
 		price(p),
 		quantity(q) {};
 
+	/** 
+	* Prints the contents of a command. 
+	* Used for debugging.
+	*/
 	void print() {
 		cout << "order_action=" << order_action << ", "
 			<< "order_id=" << order_id << ", "
@@ -851,11 +986,19 @@ public:
 	}
 };
 
+/** 
+* Represents a list of symbols (tickers) 
+* sorted for caching purposes. 
+*/
 typedef struct symbol_name_list {
 	symbol_t symbol;
 	symbol_name_list* next;
 } symbol_name_list;
 
+/** 
+* Represents a entry for a hash table mapping 
+* from orders to symbols. 
+*/
 typedef struct hash_order_to_symbol {
 	order_id_t oi;
 	char* symbol;
@@ -875,11 +1018,19 @@ private:
 
 	symbol_name_list* cache_list_sorted_symbol_names;
 
+	/** 
+	* Hashes a given int x to correspond to 
+	* a symbol space in the order book. 
+	*/
 	static unsigned int hash(unsigned int x) {
 		return ((1279 * x + 2203) 
 				% NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK);
 	}
 	
+	/**
+	* Hashes a given char string to correspond to
+	* a symbol space in the order book.
+	*/
 	static unsigned int hash(char* x) {
 		unsigned int int_repr = 0;
 		for (const char* xi = x; *xi; xi++) {
@@ -889,6 +1040,10 @@ private:
 		return hash(int_repr);
 	}
 
+	/** 
+	* Inserts a symbol into the order book hash table,
+	* to correspond to a given symbol (ticker) key.
+	*/
 	bool insert(symbol_t key) {
 		/* Add symbol to hash table */
 		char* symbol = _strdup(key.c_str());
@@ -928,6 +1083,10 @@ private:
 		return true;
 	}
 
+	/** 
+	* Looks up an entry in the order book hash table 
+	* associated with symbol (ticker) key. 
+	*/
 	OrderEntry* lookup(const symbol_t& key) {
 		char* symbol = _strdup(key.c_str());
 		int h_val = hash(symbol);
@@ -959,6 +1118,10 @@ public:
 		timestamp = 0;
 	}
 
+	/** 
+	* Adds a new order to the order book,
+	* with details provided by a command object. 
+	*/
 	bool add_new_order(const Command& o) {
 
 		int status = ACCEPT;
@@ -1000,6 +1163,10 @@ public:
 		return status;
 	}
 
+	/**
+	* Adds an order within the order book,
+	* with details provided by a command object.
+	*/
 	int ammend_order(const Command& o) {
 		OrderEntry* oe = lookup(o.symbol);
 
@@ -1018,6 +1185,10 @@ public:
 		return status;
 	}
 
+	/**
+	* Cancels an order within the order book,
+	* with details provided by a command object.
+	*/
 	int cancel_order(const Command& o) {
 		
 		OrderEntry* oe = NULL;
@@ -1037,6 +1208,10 @@ public:
 		return status;
 	}
 
+	/**
+	* Matches orders within the order book,
+	* with details provided by a command object.
+	*/
 	int match(const Command& o) {
 
 		int status = ACCEPT;
@@ -1077,6 +1252,10 @@ public:
 		return status;
 	}
 
+	/**
+	* Queries orders within the order book,
+	* with details provided by a command object.
+	*/ 
 	int query(const Command& o) {
 
 		switch (o.format) {

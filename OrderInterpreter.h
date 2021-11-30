@@ -7,20 +7,27 @@
 #define GOT_ORDER		0
 #define FINISHED_ORDERS	1
 
-
+/**
+* Responsible for matching an order action
+* and storing the result in a given action_t reference.
+*/
 bool match_order_action(char*& c, action_t& oa) {
 	bool produced = false;
 	switch (*c) {
-	case 'N': oa = NEW; produced = true; c++; break;
-	case 'A': oa = AMEND; produced = true; c++; break;
-	case 'X': oa = CANCEL; produced = true; c++; break;
-	case 'M': oa = MATCH; produced = true; c++; break;
-	case 'Q': oa = QUERY; produced = true; c++; break;
-	default: break;
+		case 'N': oa = NEW; produced = true; c++; break;
+		case 'A': oa = AMEND; produced = true; c++; break;
+		case 'X': oa = CANCEL; produced = true; c++; break;
+		case 'M': oa = MATCH; produced = true; c++; break;
+		case 'Q': oa = QUERY; produced = true; c++; break;
+		default: break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching an order id
+* and storing the result in a given order_id_t reference.
+*/
 bool match_order_id(char*& c, order_id_t& o_id) {
 	bool produced = false;
 	o_id = 0;
@@ -36,13 +43,21 @@ bool match_order_id(char*& c, order_id_t& o_id) {
 			c++;
 			continue;
 		case ',': produced = true;  break;
-		default: c = backtrack_ptr; break;
+		default: 
+			if (c != backtrack_ptr) {
+				produced = true;
+			}
+			break;
 		}
 		break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching a timestamp
+* and storing the result in a given time_t reference.
+*/
 bool match_timestamp(char*& c, time_t& t) {
 	bool produced = false;
 	t = 0;
@@ -59,13 +74,20 @@ bool match_timestamp(char*& c, time_t& t) {
 			continue;
 		case ',': produced = true;  break;
 		default: 
-			if (c != backtrack_ptr) { produced = true; } break;
+			if (c != backtrack_ptr) { 
+				produced = true; 
+			}
+			break;
 		}
 		break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching a symbol (ticker)
+* and storing the result in a given symbol_t reference.
+*/
 bool match_symbol(char*& c, symbol_t& st) {
 
 	bool produced = false;
@@ -100,27 +122,39 @@ bool match_symbol(char*& c, symbol_t& st) {
 	}
 }
 
+/**
+* Responsible for matching a order type
+* and storing the result in a given order_type_t reference.
+*/
 bool match_order_type(char*& c, order_type_t& ot) {
 	bool produced = false;
 	switch (*c) {
-	case 'M': ot = MARKET; produced = true; c++; break;
-	case 'L': ot = LIMIT; produced = true; c++; break;
-	case 'I': ot = IOC; produced = true; c++; break;
-	default: break;
+		case 'M': ot = MARKET; produced = true; c++; break;
+		case 'L': ot = LIMIT; produced = true; c++; break;
+		case 'I': ot = IOC; produced = true; c++; break;
+		default: break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching a side
+* and storing the result in a given side_t reference.
+*/
 bool match_side(char*& c, side_t& s) {
 	bool produced = false;
 	switch (*c) {
-	case 'B': s = BUY; produced = true; c++; break;
-	case 'S': s = SELL; produced = true; c++; break;
-	default: break;
+		case 'B': s = BUY; produced = true; c++; break;
+		case 'S': s = SELL; produced = true; c++; break;
+		default: break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching a price
+* and storing the result in a given price_t reference.
+*/
 bool match_price(char*& c, price_t& q) {
 	bool produced = false;
 
@@ -140,81 +174,89 @@ bool match_price(char*& c, price_t& q) {
 	while (true) {
 		switch (s) {
 
-		case ENCOUNTERED_:
-			switch (*c) {
-			case '0':
-			case '1': case '2': case '3':
-			case '4': case '5': case '6':
-			case '7': case '8': case '9':
-				*l++ = *c++;
-				continue;;
-			case '.':
-				s = ENCOUNTERED_DIGIT_DOT;
-				*l++ = *c++;
-				continue;
-			case ',':
-				s = ENCOUNTERED_DIGIT_DOT_DIGIT;
-				continue;
-			default:
-				c = backtrack_ptr;
+			case ENCOUNTERED_:
+				switch (*c) {
+				case '0':
+				case '1': case '2': case '3':
+				case '4': case '5': case '6':
+				case '7': case '8': case '9':
+					*l++ = *c++;
+					continue;;
+				case '.':
+					s = ENCOUNTERED_DIGIT_DOT;
+					*l++ = *c++;
+					continue;
+				case ',':
+					s = ENCOUNTERED_DIGIT_DOT_DIGIT;
+					continue;
+				default:
+					c = backtrack_ptr;
+					break;
+				}
 				break;
-			}
-			break;
 
-		case ENCOUNTERED_DIGIT_DOT:
-			switch (*c) {
-			case '0':
-			case '1': case '2': case '3':
-			case '4': case '5': case '6':
-			case '7': case '8': case '9':
-				*l++ = *c++;
-				continue;
-			case ',':
-				s = ENCOUNTERED_DIGIT_DOT_DIGIT;
-				continue;
-			default:
-				c = backtrack_ptr;
+			case ENCOUNTERED_DIGIT_DOT:
+				switch (*c) {
+				case '0':
+				case '1': case '2': case '3':
+				case '4': case '5': case '6':
+				case '7': case '8': case '9':
+					*l++ = *c++;
+					continue;
+				case ',':
+					s = ENCOUNTERED_DIGIT_DOT_DIGIT;
+					continue;
+				default:
+					c = backtrack_ptr;
+					break;
+				}
 				break;
-			}
-			break;
 
-		case ENCOUNTERED_DIGIT_DOT_DIGIT:
-			*l = NULL;
-			q = stof(lexeme, NULL);
-			produced = true;
-			break;
+			case ENCOUNTERED_DIGIT_DOT_DIGIT:
+				*l = NULL;
+				q = stof(lexeme, NULL);
+				produced = true;
+				break;
 
-		default: break;
+			default: break;
 		}
 		break;
 	}
 	return produced;
 }
 
+/**
+* Responsible for matching a quantity
+* and storing the result in a given quantity_t reference.
+*/
 bool match_quantity(char*& c, quantity_t& q) {
 	bool produced = false;
 	q = 0;
 	char* backtrack_ptr = c;
 	while (true) {
 		switch (*c) {
-		case '0':
-		case '1': case '2': case '3':
-		case '4': case '5': case '6':
-		case '7': case '8': case '9':
-			q *= 10;
-			q += *c - '0';
-			c++;
-			produced = true;
-			continue;
-		case ',': produced = true;  break;
-		default: break;
+			case '0':
+			case '1': case '2': case '3':
+			case '4': case '5': case '6':
+			case '7': case '8': case '9':
+				q *= 10;
+				q += *c - '0';
+				c++;
+				produced = true;
+				continue;
+			case ',': produced = true;  break;
+			default: break;
 		}
 		break;
 	}
 	return produced;
 }
 
-bool parse_order(char*& c, Command& o) {
+/**
+* Responsible for matching a command
+* and storing the result in a given Command reference.
+*/
+bool match_command(char*& c, Command& o) {
 
 	action_t order_action;
 	order_id_t order_id;
@@ -341,31 +383,50 @@ bool parse_order(char*& c, Command& o) {
 
 	case QUERY:
 
-		if (match_symbol(c, symbol)) {
+		switch (*c) {
+			case 'A': case 'B': case 'C':
+			case 'D': case 'E': case 'F':
+			case 'G': case 'H': case 'I':
+			case 'J': case 'K': case 'L':
+			case 'M': case 'N': case 'O':
+			case 'P': case 'Q': case 'R':
+			case 'S': case 'T': case 'U':
+			case 'V': case 'W': case 'X':
+			case 'Y': case 'Z':
 
-			if ((*c++ == ',') 
-				&& (match_timestamp(c, timestamp))) {
-				format = F_QUERY_SYMBOL_TIMESTAMP;
-			} else {
-				timestamp = 0;
-				format = F_QUERY_SYMBOL;
-			}
+				match_symbol(c, symbol);
+				if ((*c++ == ',')
+					&& (match_timestamp(c, timestamp))) {
+					format = F_QUERY_SYMBOL_TIMESTAMP;
+				}
+				else {
+					timestamp = 0;
+					format = F_QUERY_SYMBOL;
+				}
+				break;
 
-		} else if (match_timestamp(c, timestamp)) {
-			
-			if ((*c++ == ',')
-				&& (match_symbol(c, symbol))) {
-				format = F_QUERY_TIMESTAMP_SYMBOL;
-			} else {
-				format = F_QUERY_TIMESTAMP;
+			case '0':
+			case '1': case '2': case '3':
+			case '4': case '5': case '6':
+			case '7': case '8': case '9':
+				match_timestamp(c, timestamp);
+				if ((*c++ == ',')
+					&& (match_symbol(c, symbol))) {
+					format = F_QUERY_TIMESTAMP_SYMBOL;
+				}
+				else {
+					format = F_QUERY_TIMESTAMP;
+					symbol = symbol_t("");
+				}
+				break;
+
+			default:
 				symbol = symbol_t("");
-			}
-
-		} else {
-			symbol = symbol_t("");
-			timestamp = 0;
-			format = F_QUERY;
+				timestamp = 0;
+				format = F_QUERY;
+				break;
 		}
+
 		o = Command(order_action,
 					(order_id_t) 0,
 					timestamp,
@@ -385,6 +446,11 @@ bool parse_order(char*& c, Command& o) {
 	return history;
 }
 
+/**
+* Responsible for interpreting a command into a given
+* OrderBook, altering the state of said orderbook by
+* doing so.
+*/
 bool interpret_order(OrderBook& ob, const Command& o) {
 	switch (o.order_action) {
 
@@ -487,17 +553,25 @@ bool interpret_order(OrderBook& ob, const Command& o) {
 	return true;
 }
 
-bool interpret_orders(char*& c, OrderBook& o) {
+/**
+* Responsible for interpreting commands into a given
+* OrderBook, altering the state of said orderbook by
+* doing so.
+* @param num_orders the num of orders to interpret in sequence.
+*/
+bool interpret_orders(char*& c, OrderBook& o, int num_orders = -1) {
 
 	/* Temporary order. */
 	Command order = Command(
 		NEW, (order_id_t)0, (time_t)0, symbol_t(""),
 		BUY, LIMIT, (price_t)0, (quantity_t)0);
 
+
 	bool in_process = true;
+	int orders_processed = 0;
 	while (in_process) {
 
-		int parser_status = parse_order(c, order);
+		int parser_status = match_command(c, order);
 
 		 /*cout << "interpret_orders: recieved ";
 		order.print(); */
@@ -517,19 +591,50 @@ bool interpret_orders(char*& c, OrderBook& o) {
 
 			case GOT_ORDER: {
 				interpret_order(o, order);
+				orders_processed++;
 				break;
 			}
 
 			case FINISHED_ORDERS:
 				break;
 		}
-		if (parser_status != GOT_ORDER) break;
+		if (((num_orders != -1) 
+			&& (orders_processed >= num_orders))
+			|| parser_status != GOT_ORDER) break;
+		
 	}
 	return true;
 }
 
+/**
+* Responsible for matching a number of orders into 
+* a given int.
+*/
+bool match_num_orders(char*& c, int& n) {
+	bool produced = false;
+	n = 0;
+	while (true) {
+		switch (*c) {
+			case '0':
+			case '1': case '2': case '3':
+			case '4': case '5': case '6':
+			case '7': case '8': case '9':
+				n *= 10;
+				n += *c - '0';
+				c++;
+				produced = true;
+				continue;
+			case ',': produced = true;  break;
+			default: break;
+		}
+		break;
+	}
+	return produced;
+}
+
 void main() {
 	char* input1 = new char[] {
+		"12\n"
 		"N,1,0000001,AB,L,B,104.53,100\n"
 		"N,2,0000002,AB,L,S,105.53,100\n"
 		"N,3,0000003,AB,L,B,104.53,90\n"
@@ -544,6 +649,7 @@ void main() {
 		"Q"
 	};
 	char* input2 = new char[] {
+		"12\n"
 		"N,1,0000001,ALN,L,B,60.90,100\n"
 		"N,13,0000002,ALN,L,B,60.90,100\n"
 		"N,10,0000003,ALN,L,S,60.90,100\n"  
@@ -559,8 +665,13 @@ void main() {
 		"Q,0000002,ALN\n"
 		"Q"
 	};
+	cout << " ";
 	OrderBook sys_order_book = OrderBook();
-	interpret_orders(input1, sys_order_book);
+	char* c_ptr = input1;
+	int num_orders;
+	match_num_orders(c_ptr, num_orders);
+	if (*c_ptr == '\n') c_ptr++;
+	interpret_orders(c_ptr, sys_order_book);
 }
 
 #endif
