@@ -3,8 +3,9 @@
 #define ORDERINTERPRETER_H
 
 #include "OrderBook.h"
+#include <iomanip>
 
-#define GOT_ORDER		0
+#define GOT_ORDER 0
 #define FINISHED_ORDERS	1
 
 /**
@@ -393,7 +394,6 @@ bool match_command(char*& c, Command& o) {
 			case 'S': case 'T': case 'U':
 			case 'V': case 'W': case 'X':
 			case 'Y': case 'Z':
-
 				match_symbol(c, symbol);
 				if ((*c++ == ',')
 					&& (match_timestamp(c, timestamp))) {
@@ -557,13 +557,16 @@ bool interpret_order(OrderBook& ob, const Command& o) {
 * Responsible for interpreting commands into a given
 * OrderBook, altering the state of said orderbook by
 * doing so.
-* @param num_orders the num of orders to interpret in sequence.
+* @param num_orders the num of orders to interpret.
 */
-bool interpret_orders(char*& c, OrderBook& o, int num_orders = -1) {
+bool interpret_orders(
+	char*& c, 
+	OrderBook& o, 
+	int num_orders = -1) {
 
 	/* Temporary order. */
 	Command order = Command(
-		NEW, (order_id_t)0, (time_t)0, symbol_t(""),
+		NEW, (order_id_t)0, (time_t) 0, symbol_t(""),
 		BUY, LIMIT, (price_t)0, (quantity_t)0);
 
 
@@ -665,12 +668,13 @@ void main() {
 		"Q,0000002,ALN\n"
 		"Q"
 	};
-	cout << " ";
+	cout << "  ";
 	OrderBook sys_order_book = OrderBook();
-	char* c_ptr = input1;
+	char* c_ptr = input2;
 	int num_orders;
 	match_num_orders(c_ptr, num_orders);
 	if (*c_ptr == '\n') c_ptr++;
+	cout << fixed << setprecision(2);
 	interpret_orders(c_ptr, sys_order_book);
 }
 

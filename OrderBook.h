@@ -8,8 +8,8 @@
 #include <iostream>
 using namespace std;
 
-#define MAX_NUM_ORDERS_IN_HEAP (1 << 16)
-#define NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK (1 << 16)
+#define NUM_ORDERS_IN_HEAP (1 << 16)
+#define NUM_ORDER_BOOK_SYMBOLS (1 << 16)
 
 /* Represents the status of an error to be returned. */
 typedef enum error_status {
@@ -70,7 +70,7 @@ typedef enum execution_status_t {
 
 /* Represents alterations in the history of an order. */
 typedef struct alteration_history_t {
-	execution_status_t history;
+	execution_status_t status;
 	time_t timestamp;	
 	price_t price;
 	quantity_t quantity_remaining;
@@ -123,7 +123,7 @@ public:
 		bool is_active = false;
 		
 		alteration_history_t* ht = get_history_entry(t);
-		execution_status_t status = ht->history;
+		execution_status_t status = ht->status;
 		if ((t == -1 || history->timestamp <= t)
 			&& status != EXECUTED  
 			&& status != CANCELLED) {
@@ -136,7 +136,9 @@ public:
 	/** 
 	* Gets the relevant alteration history entry for an order.
 	*/
-	alteration_history_t *get_history_entry(const time_t& t = -1) const {
+	alteration_history_t *get_history_entry(
+		const time_t& t = -1) const {
+
 		alteration_history_t* most_recent = history; 
 		for (alteration_history_t* eht = history;
 			eht != NULL;
@@ -153,8 +155,8 @@ public:
 	/** 
 	* Gets the status of an order at a given time t.
 	*/
-	execution_status_t get_status(const time_t& t = -1) const{
-		return get_history_entry(t)->history;
+	execution_status_t get_status(const time_t& t = -1) const {
+		return get_history_entry(t)->status;
 	}
 
 	/**
@@ -202,15 +204,15 @@ public:
 		const price_t& price,
 		const quantity_t& q) {
 
-		alteration_history_t* new_entry = new alteration_history_t {
-			history,
-			t,
-			price,
-			q,
-			NULL
-		};
+		alteration_history_t* new_entry 
+			= new alteration_history_t { 
+			      history, t, price, q, NULL
+			  };
 
-		alteration_history_t* history_entry = get_history_entry();
+		alteration_history_t* history_entry 
+			= get_history_entry();
+
+
 		if (history_entry->timestamp > t) {
 			delete new_entry;
 		} else {
@@ -242,10 +244,11 @@ public:
 		const price_t& p, 
 		const quantity_t& q) {
 
-		alteration_history_t* history_entry = get_history_entry();
+		alteration_history_t* history_entry 
+			= get_history_entry();
 		
 		add_execution_history_entry(
-			history_entry->history,
+			history_entry->status,
 			history_entry->timestamp,
 			p,
 			q);
@@ -258,8 +261,7 @@ typedef enum order_heap_type_t {
 	BUY_HEAP,
 	SELL_HEAP
 } order_heap_type_t;
-
-
+ 
 /* Min-Max heap used to represent a collection of orders 
    associated with the same symbol (ticker).
    Main use is to get top elements, hide matched orders, etc. */
@@ -270,17 +272,21 @@ private:
 	   then inactive orders (which do not get heapified)
 	   inactive orders are those already matched or cancelled.
 	   after inactive orders is unused space. 
+
 	   e.g.
 	   |AAAAAAAAAAAAAAIIIIIIIIIIIIIIII-----------------| 
+		^			  ^				  ^
+		data		  active_end	  matched_end
+
 	*/
-	Order data[MAX_NUM_ORDERS_IN_HEAP];
+	Order data[NUM_ORDERS_IN_HEAP];
 
 	/* Represents the end of active orders. */
-	Order* active_ptr;
+	Order* active_end;
 	/* Represents the end of matched orders. */
-	Order* matched_ptr;
+	Order* matched_end;
 	/* Represents the used allocations in the array. */
-	bool allocated[MAX_NUM_ORDERS_IN_HEAP];
+	bool allocated[NUM_ORDERS_IN_HEAP];
 	/* Represents the type of the heap. */
 	order_heap_type_t heap_type;
 
@@ -296,9 +302,9 @@ private:
 
 	/* Makes an order in the array inactive. */
 	void make_inactive(const int& i) {
-		swap(i, active_ptr - data - 1);
-		allocated[active_ptr - data - 1] = false;
-		active_ptr--;
+		swap(i, active_end - data - 1);
+		allocated[active_end - data - 1] = false;
+		active_end--;
 		push_down(0);
 	}
 
@@ -355,7 +361,8 @@ private:
 			min = (*(data + (a << 1))).get_price();
 		}
 		if (allocated[a << 1 + 1]) {
-			if (min == -1 || (*(data + (a << 1))).get_price() < min) {
+			if (min == -1 
+				|| (*(data + (a << 1))).get_price() < min) {
 				min = (*(data + (a << 1))).get_price();
 			}
 		}
@@ -524,7 +531,7 @@ private:
 	int search(const order_id_t& id) {
 		int found_id = -1;
 		for (Order* d = data;
-			d < matched_ptr;
+			d < matched_end;
 			d++) {
 			if (allocated[d - data]
 				&& d->get_order_id() == id) {
@@ -541,17 +548,17 @@ public:
 		const order_heap_type_t& type) {
 
 		for (Order* d = data;
-			d < data + MAX_NUM_ORDERS_IN_HEAP;
+			d < data + NUM_ORDERS_IN_HEAP;
 			d++) {
 			*d = Order();
 		}
 		for (bool* b = allocated;
-			b < allocated + MAX_NUM_ORDERS_IN_HEAP;
+			b < allocated + NUM_ORDERS_IN_HEAP;
 			b++) {
 			*b = false;
 		}
-		active_ptr = data;
-		matched_ptr = active_ptr;
+		active_end = data;
+		matched_end = active_end;
 		heap_type = type;
 	}
 
@@ -559,13 +566,13 @@ public:
 	* Inserts an order in the heap.
 	*/
 	bool insert(const Order& datum) {
-		swap(active_ptr - data, matched_ptr - data);
+		swap(active_end - data, matched_end - data);
 		/* Append */
-		*(active_ptr) = datum;
-		allocated[active_ptr - data] = true;
-		push_up(active_ptr - data);
-		active_ptr++;
-		matched_ptr++;
+		*(active_end) = datum;
+		allocated[active_end - data] = true;
+		push_up(active_end - data);
+		active_end++;
+		matched_end++;
 		/* Re-heapify */
 		return true;
 	}
@@ -586,7 +593,7 @@ public:
 			Order* o = data + i;
 			o->ammend(new_price, new_quantity);
 			o->add_execution_history_entry(
-				o->get_history_entry()->history,
+				o->get_history_entry()->status,
 				o->get_timestamp(),
 				new_price,
 				new_quantity);
@@ -659,7 +666,7 @@ public:
 		Order *stack = new Order[n];
 		int stack_i = 0;
 		for (const Order* d = data;
-			d < matched_ptr;
+			d < matched_end;
 			d++) {
 
 			if (!d->active_at(t)) continue;
@@ -729,12 +736,12 @@ public:
 	}
 };
 
-/* Class representing a symbol within an orderbook hash table,
-   storing the buys and sells for a symbol, alongside the 
-   next symbol in the hash table entry. */
+/* Class representing a symbol within an orderbook hash 
+   table, storing the buys and sells for a symbol, 
+   alongside the next symbol in the hash table entry. */
 class OrderEntry {
 private:
-	/* Stores the symbol (ticker) associated with this entry. */
+	/* Stores the symbol associated with this entry. */
 	char* symbol;
 	/* Stores the buys for the symbol (ticker). */
 	OrderMinMaxHeap* buys;
@@ -806,7 +813,7 @@ public:
 
 	/**
 	* Cancels an order associated with this entry's
-	* symbol (ticker) with a given order id for a given side. 
+	* symbol (ticker) with a given id for a given side. 
 	*/
 	int cancel(
 		const order_id_t& oid, 
@@ -833,21 +840,24 @@ public:
 
 			if (!best_buy || !best_sell) break;
 			/* Collect buy data.  */
-			price_t b_price = best_buy->get_price();
+			alteration_history_t *b_history =  
+				best_buy->get_history_entry();
+
+			price_t b_price = b_history->price;
+			quantity_t b_quantity = b_history->quantity_remaining;
 			order_id_t b_oi = best_buy->get_order_id();
-			quantity_t b_quantity = best_buy->get_quantity();
 			order_type_t b_t = best_buy->get_order_type();
 		
 			/* Collect sell data. */
-			price_t s_price = best_sell->get_price();
+			alteration_history_t* s_history =
+				best_sell->get_history_entry();
+			
+			price_t s_price = s_history->price;
+			quantity_t s_quantity = s_history->quantity_remaining;
 			order_id_t s_oi = best_sell->get_order_id();
-			quantity_t s_quantity = best_sell->get_quantity();
 			order_type_t s_t = best_sell->get_order_type();
 
-
-			if (best_buy->get_history_entry()->history != EXECUTED
-				&& best_sell->get_history_entry()->history != EXECUTED
-				&& b_price >= s_price) {
+			if (b_price >= s_price) {
 
 				cout << symbol
 					 << "|"
@@ -938,7 +948,7 @@ typedef enum command_format_t {
 	F_QUERY_SYMBOL_TIMESTAMP
 } command_format_t;
 
-/* Class representing a command for the equity order matcher. */
+/* Class representing a command for an equity order matcher. */
 class Command {
 public:
 	command_format_t format;
@@ -999,24 +1009,24 @@ typedef struct symbol_name_list {
 * Represents a entry for a hash table mapping 
 * from orders to symbols. 
 */
-typedef struct hash_order_to_symbol {
+typedef struct order_to_symbol_entry {
 	order_id_t oi;
 	char* symbol;
-	hash_order_to_symbol* next;
-} hash_order_to_symbol;
+	order_to_symbol_entry* next;
+} order_to_symbol_entry;
 
 /* Class representing an order book that stores symbols, orders
    and associated caching information. */
 class OrderBook {
 private:
-	OrderEntry* table[NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK];
+	OrderEntry* table[NUM_ORDER_BOOK_SYMBOLS];
 	time_t timestamp;
 
 	/* Caching */	
-	hash_order_to_symbol* 
-		cache_order_to_symbol[NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK];
+	order_to_symbol_entry* 
+		cache_order_to_symbol[NUM_ORDER_BOOK_SYMBOLS];
 
-	symbol_name_list* cache_list_sorted_symbol_names;
+	symbol_name_list* cache_symbols;
 
 	/** 
 	* Hashes a given int x to correspond to 
@@ -1024,7 +1034,7 @@ private:
 	*/
 	static unsigned int hash(unsigned int x) {
 		return ((1279 * x + 2203) 
-				% NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK);
+				% NUM_ORDER_BOOK_SYMBOLS);
 	}
 	
 	/**
@@ -1051,27 +1061,32 @@ private:
 		OrderEntry* lookup_result = *lookup_result_addr;
 		*lookup_result_addr = new OrderEntry(symbol);
 		/* Add symbol to list cache */
-		symbol_name_list* snl = cache_list_sorted_symbol_names;
+		symbol_name_list* snl = cache_symbols;
 		if (snl == NULL) {
-			cache_list_sorted_symbol_names = new symbol_name_list {
+			cache_symbols = new symbol_name_list {
 				key, NULL
 			};
-		} else if ((strcmp(cache_list_sorted_symbol_names->symbol.c_str(),
+		} else if ((strcmp(cache_symbols->symbol.c_str(),
 						   key.c_str()) 
 				   >= 0)) {
 
 			symbol_name_list* n_snl = new symbol_name_list{
-				key, cache_list_sorted_symbol_names
+				key, cache_symbols
 			};
-			cache_list_sorted_symbol_names = n_snl;
+			cache_symbols = n_snl;
 
 		} else {
 			while (true) {
-				if ((snl->next != NULL)
-					&& (strcmp(snl->symbol.c_str(), key.c_str()) < 0)) {
-					snl = snl->next; 
-				}
-				else {
+				if (snl->next == NULL) {
+					break;
+				} else {
+					int diff = strcmp(
+						snl->symbol.c_str(), 
+						key.c_str());
+					if (diff < 0) {
+						snl = snl->next;
+						continue;
+					}
 					break;
 				}
 			}
@@ -1093,8 +1108,13 @@ private:
 		OrderEntry* lookup_result = *(table + h_val);
 		if (lookup_result) {
 			while (lookup_result->get_next_entry()) {
-				if (strcmp(lookup_result->get_symbol(), symbol) != 0) {
-					lookup_result = lookup_result->get_next_entry();
+
+				int diff = strcmp(
+					lookup_result->get_symbol(), symbol );
+
+				if (diff != 0) {
+					lookup_result = 
+						lookup_result->get_next_entry();
 					continue;
 				}
 				break;
@@ -1106,12 +1126,16 @@ private:
 public:
 	OrderBook() {
 		for (OrderEntry** t = table;
-			t < (table + NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK);
+			t < (table + NUM_ORDER_BOOK_SYMBOLS);
 			t++) {
 			*t = NULL;
 		}
-		for (hash_order_to_symbol** s = cache_order_to_symbol;
-			s < (cache_order_to_symbol + NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK);
+
+		order_to_symbol_entry** last_entry = 
+			cache_order_to_symbol + NUM_ORDER_BOOK_SYMBOLS;
+
+		for (order_to_symbol_entry** s = cache_order_to_symbol;
+			s < last_entry;
 			s++) {
 			*s = NULL;
 		}
@@ -1140,18 +1164,19 @@ public:
 				o.price,
 				o.quantity);
 
-			/* Record this order in the order-to-symbol cache map */
+			/* Record order in the order-to-symbol cache */
 			int h = hash((unsigned int) o.order_id);
-			hash_order_to_symbol **entry = cache_order_to_symbol + h;
+			order_to_symbol_entry **entry = 
+				cache_order_to_symbol + h;
 			if (*entry == NULL) {
-				*entry = new hash_order_to_symbol{
+				*entry = new order_to_symbol_entry{
 				o.order_id,
 				_strdup(o.symbol.c_str()),
 				};
 			} else {
-				hash_order_to_symbol* e;
+				order_to_symbol_entry* e;
 				for (e = *entry; e->next; e = e->next);
-				e->next = new hash_order_to_symbol{
+				e->next = new order_to_symbol_entry{
 					o.order_id,
 					_strdup(o.symbol.c_str()),
 				};
@@ -1225,7 +1250,7 @@ public:
 				case F_MATCH_TIMESTAMP:
 					/* For each entry in table */
 					for (OrderEntry** te = table;
-						te < table + NUM_TOTAL_SYMBOLS_IN_ORDER_BOOK;
+						te < table + NUM_ORDER_BOOK_SYMBOLS;
 						te++) {
 						/* For each entry in table entry */
 						for (OrderEntry* e = *te;
@@ -1261,7 +1286,7 @@ public:
 		switch (o.format) {
 
 			case F_QUERY: {
-				for (symbol_name_list* snl = cache_list_sorted_symbol_names;
+				for (symbol_name_list* snl = cache_symbols;
 					snl != NULL;
 					snl = snl->next) {
 				
@@ -1278,7 +1303,7 @@ public:
 			}				
 			
 			case F_QUERY_TIMESTAMP: {
-				for (symbol_name_list* snl = cache_list_sorted_symbol_names;
+				for (symbol_name_list* snl = cache_symbols;
 					snl != NULL;
 					snl = snl->next) {
 					
